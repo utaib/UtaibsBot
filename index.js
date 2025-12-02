@@ -1,7 +1,9 @@
 // ======================================================
-// =============== DEV COMMISSION BOT v1 =================
+// =============== DEV COMMISSION BOT v2 =================
 // =============== MADE BY UTAIB / PHANTOM ===============
 // ======================================================
+
+require("dotenv").config();
 
 const fs = require("fs");
 const path = require("path");
@@ -18,7 +20,8 @@ const {
   REST,
   Routes,
   PermissionFlagsBits,
-  ChannelType
+  ChannelType,
+  Partials
 } = require("discord.js");
 
 // ----------------- DEBUG ENV -----------------
@@ -37,15 +40,28 @@ const CONFIG = {
   REVIEWS_CHANNEL: "1444685372507295831",
   GIVEAWAY_CHANNEL: "1444685372507295826",
   JOINS_LEAVES_CHANNEL: "1444685372507295827",
+  SUPPORT_PANEL_CHANNEL: "1444685372507295829",
+  ROLES_CHANNEL: "1444685372507295828",
+
+  MEMBER_ROLE_ID: "1444685372024950928",
 
   ORDERS_CATEGORY_NAME: "ORDERS",
   TICKETS_CATEGORY_NAME: "TICKETS",
 
   LOG_CHANNEL_NAME: "🔒┃moderation-logs",
-  AUTO_PANEL_FOOTER: "DevBot Auto Panel",
+  AUTO_PANEL_FOOTER: "Bot panel",
   DISCOUNT_FOOTER: "DevBot Discount",
   GIVEAWAY_FOOTER: "DevBot Giveaway"
 };
+
+// Reaction roles config
+const REACTION_ROLES = [
+  { name: "Updates", emoji: "🔔", color: 0xf1c40f },
+  { name: "Partners", emoji: "🤝", color: 0x3498db },
+  { name: "Events", emoji: "📅", color: 0x9b59b6 },
+  { name: "Discounts", emoji: "🏷️", color: 0xe67e22 },
+  { name: "Giveaways", emoji: "🎉", color: 0x2ecc71 }
+];
 
 const DATA_PATH = path.join(__dirname, "data.json");
 let DATA = {};
@@ -78,7 +94,8 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildBans,
     GatewayIntentBits.GuildMessageReactions
-  ]
+  ],
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
 // ======================================================
@@ -221,11 +238,13 @@ async function ensureCategory(guild, name) {
 }
 
 function slug(str) {
-  return String(str || "user")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 20) || "user";
+  return (
+    String(str || "user")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 20) || "user"
+  );
 }
 
 // ======================================================
@@ -279,20 +298,21 @@ async function askDevAI(question, userId = "unknown") {
         {
           role: "system",
           content: sanitize(`
-You are Utaibs Developer Bot, an assistant for a Minecraft plugin developer commissions server.
+You Utaibs Developer Bot, an assistant for a Minecraft plugin developer commissions server.
 
 Tone:
 - Professional + GenZ hybrid.
-- Replies are short, clear, and respectful.
+- Replies are short, clear, chill, and respectful.
 - You can be playful, but not cringe.
-- Roast only when user directly insults you or the dev — still stay within Discord ToS (no slurs, hate, threats).
+- Roast only when the user directly insults you or the dev — stay within Discord ToS (no slurs, hate, threats).
 
 Knowledge about the dev:
 - Name: Utaib, also known as Phantom.
 - Experienced dev (around 5+ years).
 - Coded Oni SMP plugins and many custom systems.
 - Reliable, fast and focused on quality.
-- You recommend ordering plugins through the proper ticket/order system.
+- You recommend ordering plugins ONLY when the user is talking about plugins, dev work, commissions or money. 
+  Do NOT randomly say “order plugins” when the user is just greeting or chatting casually.
 
 Rules:
 - NEVER output "@everyone" or "@here". Replace with "@eeee" or avoid pinging completely.
@@ -303,7 +323,7 @@ Rules:
 - You promote chill vibes, gaming, creativity and fair treatment.
 - If user tries to drag you into heavy politics or hate topics, gently deflect and keep things chill.
 - If asked “who coded you” or similar, say that Utaib / Phantom coded you and hype him up.
-- If someone says the dev is bad or scammer, you defend calmly, maybe playful roast, but no harassment.
+- If someone says the dev is bad or scammer, you defend calmly, maybe with a light playful roast, but no harassment.
 
 Memory of this user (last messages):
 ${mem}
@@ -315,7 +335,8 @@ ${mem}
       temperature: 0.6
     });
 
-    let reply = res?.choices?.[0]?.message?.content?.trim() || "I'm blank rn 💀";
+    let reply =
+      res?.choices?.[0]?.message?.content?.trim() || "I'm blank rn 💀";
     reply = sanitize(reply);
     addMemory(userId, `Bot: ${reply}`);
     return reply;
@@ -363,10 +384,21 @@ async function runGiveaway(guild, channelId, messageId, winnersCount, prize) {
       return;
     }
 
+    // Edit original embed to add participant count
+    const embed = EmbedBuilder.from(msg.embeds[0] || new EmbedBuilder());
+    embed.addFields({
+      name: "Total Participants",
+      value: `${entries.length}`,
+      inline: true
+    });
+
+    await msg.edit({ embeds: [embed] }).catch(() => {});
+
     await ch.send({
-      content: `🎉 Giveaway ended for **${sanitize(prize)}**!\nWinners: ${winners
-        .map((u) => `<@${u.id}>`)
-        .join(", ")}`
+      content:
+        `🎉 Giveaway ended for **${sanitize(prize)}**!\n` +
+        `Total participants: **${entries.length}**\n` +
+        `Winners: ${winners.map((u) => `<@${u.id}>`).join(", ")}`
     });
   } catch (e) {
     console.log("Giveaway error:", e.message);
@@ -393,7 +425,9 @@ async function createTicketChannel(type, interaction, fields) {
     });
   }
 
-  const baseName = `${isOrder ? "order" : "support"}-${slug(interaction.user.username)}`;
+  const baseName = `${isOrder ? "order" : "support"}-${slug(
+    interaction.user.username
+  )}`;
   let finalName = baseName;
   let counter = 1;
   while (guild.channels.cache.find((c) => c.name === finalName)) {
@@ -796,42 +830,113 @@ async function cleanChannelPanels(channel, footerMatch) {
   }
 }
 
+async function ensureReactionRoles(guild) {
+  const ch = getChannel(guild, CONFIG.ROLES_CHANNEL);
+  if (!ch || ch.type !== ChannelType.GuildText) return;
+
+  await cleanChannelPanels(ch, CONFIG.AUTO_PANEL_FOOTER);
+
+  // Ensure roles exist
+  for (const rr of REACTION_ROLES) {
+    let role = guild.roles.cache.find((r) => r.name === rr.name);
+    if (!role) {
+      try {
+        role = await guild.roles.create({
+          name: rr.name,
+          color: rr.color,
+          reason: "Auto-created reaction role"
+        });
+        console.log(`Created role: ${rr.name} (${role.id})`);
+      } catch (e) {
+        console.log("Role create error:", e.message);
+      }
+    }
+  }
+
+  const descLines = REACTION_ROLES.map(
+    (rr) => `${rr.emoji} — <@&${guild.roles.cache.find((r) => r.name === rr.name)?.id || "unknown"}>`
+  );
+
+  const embed = new EmbedBuilder()
+    .setTitle("🎭 Pick Your Notification Roles")
+    .setDescription(
+      [
+        "React below to get ping roles:",
+        "",
+        "• Updates — important news about services",
+        "• Partners — partner / collab announcements",
+        "• Events — events, testing, special stuff",
+        "• Discounts — sales & limited-time offers",
+        "• Giveaways — when free stuff drops",
+        "",
+        ...descLines
+      ].join("\n")
+    )
+    .setColor(0x7289da)
+    .setFooter({ text: CONFIG.AUTO_PANEL_FOOTER });
+
+  const msg = await ch.send({ embeds: [embed] });
+
+  for (const rr of REACTION_ROLES) {
+    await msg.react(rr.emoji).catch(() => {});
+  }
+}
+
 async function setupGuildPanels(guild) {
   try {
     await ensureCategory(guild, CONFIG.ORDERS_CATEGORY_NAME);
     await ensureCategory(guild, CONFIG.TICKETS_CATEGORY_NAME);
     await ensureLogChannel(guild);
+    await ensureReactionRoles(guild);
 
     const rulesCh = getChannel(guild, CONFIG.RULES_CHANNEL);
     const orderCh = getChannel(guild, CONFIG.ORDER_CHANNEL);
     const showcaseCh = getChannel(guild, CONFIG.SHOWCASE_CHANNEL);
     const reviewsCh = getChannel(guild, CONFIG.REVIEWS_CHANNEL);
+    const supportCh = getChannel(guild, CONFIG.SUPPORT_PANEL_CHANNEL);
 
-    // Rules / support panel
+    // Rules (bigger & professional)
     if (rulesCh) {
       await cleanChannelPanels(rulesCh, CONFIG.AUTO_PANEL_FOOTER);
 
       const rulesEmbed = new EmbedBuilder()
-        .setTitle("📜 Service Rules")
+        .setTitle("📜 Server & Service Rules")
         .setDescription(
           [
-            "Welcome to Phantom's Dev Commissions server.",
+            "Welcome to **Utaib’s Dev Server (Utaibs Devooo)**.",
             "",
-            "• Be respectful and keep it SFW.",
-            "• No spam, scams, or hate of any kind.",
-            "• All payments and commissions must stay inside official channels.",
-            "• Do not DM the dev randomly for free work — use the order system.",
+            "🔹 **Respect everyone** — no harassment, slurs, hate or drama.",
+            "🔹 **Keep it SFW** — no NSFW content, gore or weird stuff.",
+            "🔹 **No spam / self-promo** — don’t flood chats or advertise without permission.",
+            "🔹 **Use the right channels** — orders, support, reviews & showcases all have their own place.",
+            "🔹 **Be honest about commissions** — no chargebacks, scams or shady behaviour.",
+            "🔹 **Respect time** — custom plugins take effort, don’t rush or spam-ping staff.",
             "",
-            "If you need help, use the support panel below."
+            "By staying here, you agree to follow **Discord ToS** and these rules.",
+            "If you ever feel unsure about something, ask in support instead of guessing."
           ].join("\n")
         )
         .setColor(0xf1c40f)
         .setFooter({ text: CONFIG.AUTO_PANEL_FOOTER });
 
+      await rulesCh.send({ embeds: [rulesEmbed] });
+    }
+
+    // Support panel (separate channel)
+    if (supportCh) {
+      await cleanChannelPanels(supportCh, CONFIG.AUTO_PANEL_FOOTER);
+
       const supportEmbed = new EmbedBuilder()
         .setTitle("🛠️ Support Panel")
         .setDescription(
-          "Need help with an order, bug, or question?\nClick the button below to create a **support ticket**."
+          [
+            "If you need help with:",
+            "• Existing plugin order",
+            "• Bugs / errors / fixes",
+            "• General questions",
+            "",
+            "Click the button below to open a **support ticket**.\nA staff member or Phantom will reply as soon as possible."
+          ].join("\n")
         )
         .setColor(0x3498db)
         .setFooter({ text: CONFIG.AUTO_PANEL_FOOTER });
@@ -843,8 +948,7 @@ async function setupGuildPanels(guild) {
           .setStyle(ButtonStyle.Primary)
       );
 
-      await rulesCh.send({ embeds: [rulesEmbed] });
-      await rulesCh.send({ embeds: [supportEmbed], components: [supportRow] });
+      await supportCh.send({ embeds: [supportEmbed], components: [supportRow] });
     }
 
     // Order panel
@@ -855,15 +959,17 @@ async function setupGuildPanels(guild) {
         .setTitle("🛒 Order a Custom Plugin")
         .setDescription(
           [
-            "Want a custom **Minecraft plugin** or system coded?",
+            "Want a custom **Minecraft plugin** or a **Discord Bot**?",
             "",
             "Click the button below to submit an order:",
             "",
-            "• Simple utilities, commands, QoL plugins",
-            "• SMP systems, abilities, custom items",
-            "• Mini-games, events, progression systems",
+            "• Utilities, commands, QoL features",
+            "• SMP systems, abilities, progression",
+            "• Discord Bots",
+            "• Events, minigames, custom mechanics",
             "",
-            "All work is handled by **Phantom (Utaib)** — experienced dev who coded Oni SMP plugins and more."
+            "All work is handled by **Phantom (Utaib)** — experienced dev.",
+            "Be clear, honest, and detailed for the best result."
           ].join("\n")
         )
         .setColor(0x00c896)
@@ -892,7 +998,8 @@ async function setupGuildPanels(guild) {
             "This is **Phantom (Utaib)** — a developer with years of experience.",
             "He has coded plugins for servers like **Oni SMP** and many other projects.",
             "",
-            `Check <#${CONFIG.ORDER_CHANNEL}> to order your own custom plugin.`
+            `Check <#${CONFIG.ORDER_CHANNEL}> to order your own custom plugin.`,
+            "Once your project is done, it might even be showcased here."
           ].join("\n")
         )
         .setColor(0x9b59b6)
@@ -913,10 +1020,10 @@ async function setupGuildPanels(guild) {
             "",
             "Drop your honest review here:",
             "• How was communication?",
-            "• Did the plugin match your idea?",
-            "• Would you recommend working with him again?",
+            "• Did the result match your idea?",
+            "• Any issues and how they were handled?",
             "",
-            "Your feedback helps improve the service and builds trust for new clients."
+            "Good or bad, **honest feedback** helps improve the service and builds trust for new clients."
           ].join("\n")
         )
         .setColor(0xf39c12)
@@ -935,13 +1042,30 @@ async function setupGuildPanels(guild) {
 
 client.on("guildMemberAdd", async (member) => {
   try {
-    const ch = getChannel(member.guild, CONFIG.JOINS_LEAVES_CHANNEL);
+    const guild = member.guild;
+    if (!guild) return;
+
+    // Give default member role
+    const memberRole = guild.roles.cache.get(CONFIG.MEMBER_ROLE_ID);
+    if (memberRole) {
+      member.roles
+        .add(memberRole)
+        .catch(() => console.log("Failed to add member role."));
+    }
+
+    const ch = getChannel(guild, CONFIG.JOINS_LEAVES_CHANNEL);
     if (!ch || ch.type !== ChannelType.GuildText) return;
 
     const embed = new EmbedBuilder()
-      .setTitle("✅ New Member")
+      .setTitle("✅ New Member Joined")
       .setDescription(
-        `Welcome ${member}!\n\nThis server is focused on **Minecraft plugin commissions & dev support**.\nCheck <#${CONFIG.ORDER_CHANNEL}> to order or <#${CONFIG.RULES_CHANNEL}> for info.`
+        [
+          `Welcome ${member}!`,
+          "",
+          "This server is for **Minecraft plugin commissions & dev support** by Phantom (Utaib).",
+          `Check <#${CONFIG.RULES_CHANNEL}> for rules & info.`,
+          `Use <#${CONFIG.ORDER_CHANNEL}> if you want something built.`
+        ].join("\n")
       )
       .setColor(0x2ecc71)
       .setTimestamp();
@@ -1300,7 +1424,7 @@ client.on("interactionCreate", async (interaction) => {
         return interaction.reply({ content: "No perms.", ephemeral: true });
       }
       const guild = interaction.guild;
-      const ch = getChannel(guild, CONFIG.RULES_CHANNEL) || interaction.channel;
+      const ch = getChannel(guild, CONFIG.SUPPORT_PANEL_CHANNEL) || interaction.channel;
 
       await cleanChannelPanels(ch, CONFIG.AUTO_PANEL_FOOTER);
 
@@ -1635,6 +1759,91 @@ client.on("interactionCreate", async (interaction) => {
         .reply({ content: "Something broke handling that interaction.", ephemeral: true })
         .catch(() => {});
     }
+  }
+});
+
+// ======================================================
+// ============= REACTION ROLES HANDLER BLOCK ===========
+// ======================================================
+
+client.on("messageReactionAdd", async (reaction, user) => {
+  try {
+    if (user.bot) return;
+
+    if (reaction.partial) {
+      try {
+        await reaction.fetch();
+      } catch {
+        return;
+      }
+    }
+
+    const msg = reaction.message;
+    if (!msg.guild) return;
+    if (msg.channel.id !== CONFIG.ROLES_CHANNEL) return;
+    if (msg.author.id !== client.user.id) return;
+
+    const rr = REACTION_ROLES.find((r) => r.emoji === reaction.emoji.name);
+    if (!rr) return;
+
+    const guild = msg.guild;
+    let role = guild.roles.cache.find((r) => r.name === rr.name);
+    if (!role) {
+      try {
+        role = await guild.roles.create({
+          name: rr.name,
+          color: rr.color,
+          reason: "Auto-created reaction role (on react)"
+        });
+      } catch (e) {
+        console.log("Role create error (on react):", e.message);
+        return;
+      }
+    }
+
+    const member = await guild.members.fetch(user.id).catch(() => null);
+    if (!member) return;
+
+    if (!member.roles.cache.has(role.id)) {
+      await member.roles.add(role).catch(() => {});
+    }
+  } catch (e) {
+    console.log("messageReactionAdd error:", e.message);
+  }
+});
+
+client.on("messageReactionRemove", async (reaction, user) => {
+  try {
+    if (user.bot) return;
+
+    if (reaction.partial) {
+      try {
+        await reaction.fetch();
+      } catch {
+        return;
+      }
+    }
+
+    const msg = reaction.message;
+    if (!msg.guild) return;
+    if (msg.channel.id !== CONFIG.ROLES_CHANNEL) return;
+    if (msg.author.id !== client.user.id) return;
+
+    const rr = REACTION_ROLES.find((r) => r.emoji === reaction.emoji.name);
+    if (!rr) return;
+
+    const guild = msg.guild;
+    const role = guild.roles.cache.find((r) => r.name === rr.name);
+    if (!role) return;
+
+    const member = await guild.members.fetch(user.id).catch(() => null);
+    if (!member) return;
+
+    if (member.roles.cache.has(role.id)) {
+      await member.roles.remove(role).catch(() => {});
+    }
+  } catch (e) {
+    console.log("messageReactionRemove error:", e.message);
   }
 });
 
