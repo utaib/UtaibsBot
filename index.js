@@ -1063,8 +1063,8 @@ await reviewsCh.send({
   components: [reviewRow]
 });
 }
-}  // <-- BRO THIS ONE LINE FIXES THE ENTIRE BOT 🔥🔥🔥
-
+}
+}
 
 
 // ======================================================
