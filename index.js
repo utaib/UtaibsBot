@@ -1058,11 +1058,12 @@ if (reviewsCh) {
       .setStyle(ButtonStyle.Primary)
   );
 
-  await reviewsCh.send({
-    embeds: [reviewsEmbed],
-    components: [reviewRow]
-  });
+await reviewsCh.send({
+  embeds: [reviewsEmbed],
+  components: [reviewRow]
+});
 }
+}  // <-- BRO THIS ONE LINE FIXES THE ENTIRE BOT 🔥🔥🔥
 
 
 
