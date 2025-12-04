@@ -1305,23 +1305,26 @@ if (interaction.customId === "review_modal") {
   const stars = (n) => "⭐".repeat(n);
 
   const embed = new EmbedBuilder()
-    .setTitle(`📝 New Review by ${interaction.user.username}`)
+    .setTitle(`📝 New Review Submitted`)
     .setDescription(
       [
-        `**Reviewer:** ${interaction.user}`,
-        `**IGN:** ${name}`,
-        `**Plugin Purchased:** ${plugin}`,
+        `**👤 Reviewer:** ${interaction.user}`,
+        `**🎮 In Game Name:** ${name}`,
+        `**🔧 Plugin which was Purchased:** ${plugin}`,
         "",
-        `**Delivery:** ${stars(delivery)}`,
-        `**Satisfaction:** ${stars(satisfaction)}`,
+        "━━━━━━━━━━━━━━━━━━━━",
+        `** Delivery Rating:** ${stars(delivery)} (${delivery}/5)`,
+        `**Satisfaction Rating:** ${stars(satisfaction)} (${satisfaction}/5)`,
+        "━━━━━━━━━━━━━━━━━━━━",
         "",
         `**Comments:**`,
-        comments
+        comments,
       ].join("\n")
     )
     .setColor(0x2ecc71)
-    .setTimestamp();
-
+    .setTimestamp()
+    .setThumbnail("https://cdn.discordapp.com/emojis/1123309727302936636.gif?size=128"); // animated star
+  
   const reviewsCh = interaction.guild.channels.cache.get(CONFIG.REVIEWS_CHANNEL);
   if (reviewsCh) {
     await reviewsCh.send({ embeds: [embed] });
@@ -1332,6 +1335,7 @@ if (interaction.customId === "review_modal") {
     ephemeral: true
   });
 }
+
 
       if (interaction.customId === "support_modal") {
         const fields = {
