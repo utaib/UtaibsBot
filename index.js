@@ -101,6 +101,28 @@ const client = new Client({
 // ======================================================
 // ===================== HELPER BLOCK ===================
 // ======================================================
+async function cleanReviewPanel(channel) {
+  if (!channel) return;
+
+  try {
+    const messages = await channel.messages.fetch({ limit: 20 });
+
+    const toDelete = messages.filter(
+      (m) =>
+        m.author.id === client.user.id &&
+        m.embeds.length > 0 &&
+        m.embeds[0].footer &&
+        m.embeds[0].footer.text === CONFIG.AUTO_PANEL_FOOTER &&
+        m.embeds[0].title === "⭐ Leave a Review"
+    );
+
+    for (const msg of toDelete.values()) {
+      await msg.delete().catch(() => {});
+    }
+  } catch (e) {
+    console.log("Review panel cleanup error:", e);
+  }
+}
 
 function sanitize(text) {
   if (!text) return text;
@@ -1007,34 +1029,42 @@ async function setupGuildPanels(guild) {
 
       await showcaseCh.send({ embeds: [showcaseEmbed] });
     }
+// Reviews
+if (reviewsCh) {
+  // Delete ONLY the old review panel, NOT user reviews
+  await cleanReviewPanel(reviewsCh);
 
-    // Reviews
-    if (reviewsCh) {
-      await cleanChannelPanels(reviewsCh, CONFIG.AUTO_PANEL_FOOTER);
+  const reviewsEmbed = new EmbedBuilder()
+    .setTitle("⭐ Leave a Review")
+    .setDescription(
+      [
+        "Already got a plugin or help from Phantom?",
+        "",
+        "Drop your honest review here:",
+        "• How was communication?",
+        "• Did the result match your idea?",
+        "• Any issues and how they were handled?",
+        "",
+        "Good or bad, **honest feedback** helps improve the service and builds trust for new clients."
+      ].join("\n")
+    )
+    .setColor(0xf39c12)
+    .setFooter({ text: CONFIG.AUTO_PANEL_FOOTER });
 
-      const reviewsEmbed = new EmbedBuilder()
-        .setTitle("⭐ Leave a Review")
-        .setDescription(
-          [
-            "Already got a plugin or help from Phantom?",
-            "",
-            "Drop your honest review here:",
-            "• How was communication?",
-            "• Did the result match your idea?",
-            "• Any issues and how they were handled?",
-            "",
-            "Good or bad, **honest feedback** helps improve the service and builds trust for new clients."
-          ].join("\n")
-        )
-        .setColor(0xf39c12)
-        .setFooter({ text: CONFIG.AUTO_PANEL_FOOTER });
+  const reviewRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("review_open")
+      .setLabel("Write Review")
+      .setStyle(ButtonStyle.Primary)
+  );
 
-      await reviewsCh.send({ embeds: [reviewsEmbed] });
-    }
-  } catch (e) {
-    console.log("setupGuildPanels error:", e.message);
-  }
+  await reviewsCh.send({
+    embeds: [reviewsEmbed],
+    components: [reviewRow]
+  });
 }
+
+
 
 // ======================================================
 // ================= JOIN / LEAVE BLOCK =================
@@ -1142,6 +1172,52 @@ client.on("interactionCreate", async (interaction) => {
 
         return interaction.showModal(modal);
       }
+// REVIEW BUTTON
+if (interaction.customId === "review_open") {
+  const modal = new ModalBuilder()
+    .setCustomId("review_modal")
+    .setTitle("Submit a Review");
+
+  const name = new TextInputBuilder()
+    .setCustomId("review_name")
+    .setLabel("Your Name / IGN")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true);
+
+  const plugin = new TextInputBuilder()
+    .setCustomId("review_plugin")
+    .setLabel("Which plugin did you buy?")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true);
+
+  const delivery = new TextInputBuilder()
+    .setCustomId("review_delivery")
+    .setLabel("Delivery Rating (1–5)")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true);
+
+  const satisfaction = new TextInputBuilder()
+    .setCustomId("review_satisfaction")
+    .setLabel("Satisfaction (1–5)")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true);
+
+  const comments = new TextInputBuilder()
+    .setCustomId("review_comments")
+    .setLabel("Additional comments (optional)")
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(false);
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(name),
+    new ActionRowBuilder().addComponents(plugin),
+    new ActionRowBuilder().addComponents(delivery),
+    new ActionRowBuilder().addComponents(satisfaction),
+    new ActionRowBuilder().addComponents(comments)
+  );
+
+  return interaction.showModal(modal);
+}
 
       if (id === "support_open") {
         const modal = new ModalBuilder()
@@ -1211,6 +1287,48 @@ client.on("interactionCreate", async (interaction) => {
         };
         return createTicketChannel("order", interaction, fields);
       }
+// REVIEW SUBMIT
+if (interaction.customId === "review_modal") {
+  const name = interaction.fields.getTextInputValue("review_name");
+  const plugin = interaction.fields.getTextInputValue("review_plugin");
+  let delivery = parseInt(interaction.fields.getTextInputValue("review_delivery"));
+  let satisfaction = parseInt(interaction.fields.getTextInputValue("review_satisfaction"));
+  const comments = interaction.fields.getTextInputValue("review_comments") || "No additional comments.";
+
+  // sanitize rating
+  delivery = Math.min(Math.max(delivery || 1, 1), 5);
+  satisfaction = Math.min(Math.max(satisfaction || 1, 1), 5);
+
+  const stars = (n) => "⭐".repeat(n);
+
+  const embed = new EmbedBuilder()
+    .setTitle(`📝 New Review by ${interaction.user.username}`)
+    .setDescription(
+      [
+        `**Reviewer:** ${interaction.user}`,
+        `**IGN:** ${name}`,
+        `**Plugin Purchased:** ${plugin}`,
+        "",
+        `**Delivery:** ${stars(delivery)}`,
+        `**Satisfaction:** ${stars(satisfaction)}`,
+        "",
+        `**Comments:**`,
+        comments
+      ].join("\n")
+    )
+    .setColor(0x2ecc71)
+    .setTimestamp();
+
+  const reviewsCh = interaction.guild.channels.cache.get(CONFIG.REVIEWS_CHANNEL);
+  if (reviewsCh) {
+    await reviewsCh.send({ embeds: [embed] });
+  }
+
+  return interaction.reply({
+    content: "⭐ Thank you! Your review has been recorded.",
+    ephemeral: true
+  });
+}
 
       if (interaction.customId === "support_modal") {
         const fields = {
