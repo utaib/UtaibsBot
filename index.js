@@ -903,7 +903,6 @@ async function ensureReactionRoles(guild) {
     await msg.react(rr.emoji).catch(() => {});
   }
 }
-
 async function setupGuildPanels(guild) {
   try {
     await ensureCategory(guild, CONFIG.ORDERS_CATEGORY_NAME);
@@ -1029,41 +1028,44 @@ async function setupGuildPanels(guild) {
 
       await showcaseCh.send({ embeds: [showcaseEmbed] });
     }
-// Reviews
-if (reviewsCh) {
-  // Delete ONLY the old review panel, NOT user reviews
-  await cleanReviewPanel(reviewsCh);
 
-  const reviewsEmbed = new EmbedBuilder()
-    .setTitle("⭐ Leave a Review")
-    .setDescription(
-      [
-        "Already got a plugin or help from Phantom?",
-        "",
-        "Drop your honest review here:",
-        "• How was communication?",
-        "• Did the result match your idea?",
-        "• Any issues and how they were handled?",
-        "",
-        "Good or bad, **honest feedback** helps improve the service and builds trust for new clients."
-      ].join("\n")
-    )
-    .setColor(0xf39c12)
-    .setFooter({ text: CONFIG.AUTO_PANEL_FOOTER });
+    // Reviews
+    if (reviewsCh) {
+      // Delete ONLY the old review panel, NOT user reviews
+      await cleanReviewPanel(reviewsCh);
 
-  const reviewRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("review_open")
-      .setLabel("Write Review")
-      .setStyle(ButtonStyle.Primary)
-  );
+      const reviewsEmbed = new EmbedBuilder()
+        .setTitle("⭐ Leave a Review")
+        .setDescription(
+          [
+            "Already got a plugin or help from Phantom?",
+            "",
+            "Drop your honest review here:",
+            "• How was communication?",
+            "• Did the result match your idea?",
+            "• Any issues and how they were handled?",
+            "",
+            "Good or bad, **honest feedback** helps improve the service and builds trust for new clients."
+          ].join("\n")
+        )
+        .setColor(0xf39c12)
+        .setFooter({ text: CONFIG.AUTO_PANEL_FOOTER });
 
-await reviewsCh.send({
-  embeds: [reviewsEmbed],
-  components: [reviewRow]
-});
-}
-}
+      const reviewRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("review_open")
+          .setLabel("Write Review")
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      await reviewsCh.send({
+        embeds: [reviewsEmbed],
+        components: [reviewRow]
+      });
+    }
+  } catch (e) {
+    console.log("setupGuildPanels error:", e.message);
+  }
 }
 
 
